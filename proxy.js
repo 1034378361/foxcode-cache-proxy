@@ -35,6 +35,9 @@ const CONFIG = {
   },
   
   timeoutMs: parseInt(process.env.TIMEOUT_MS || '180000'),
+  
+  // 调试转储目录
+  dumpDir: process.env.DUMP_DIR || './dumps',
 };
 
 // ============ 日志 ============
@@ -195,7 +198,7 @@ async function handleGeminiRequest(data, req, res) {
 function saveGeminiDump(data) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `gemini-${timestamp}.json`;
-  const filepath = join(DUMP_DIR, filename);
+  const filepath = join(CONFIG.dumpDir, filename);
   
   const dump = {
     timestamp: new Date().toISOString(),
@@ -213,13 +216,13 @@ function saveGeminiDump(data) {
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
-const DUMP_DIR = '/home/zyq/clawd/foxcode-proxy/dumps';
-if (!existsSync(DUMP_DIR)) mkdirSync(DUMP_DIR, { recursive: true });
+// 使用配置中的 dumpDir，创建目录（如果不存在）
+if (!existsSync(CONFIG.dumpDir)) mkdirSync(CONFIG.dumpDir, { recursive: true });
 
 function saveRequestDump(data, sessionId) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `codex-${timestamp}.json`;
-  const filepath = join(DUMP_DIR, filename);
+  const filepath = join(CONFIG.dumpDir, filename);
   
   // 提取系统提示（可能在 instructions 或 input[0]）
   let systemPrompt = data.instructions || '';
@@ -349,7 +352,7 @@ async function forwardClaude(data, headers, res, targetUrl) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': headers.authorization,
+        'Authorization': headers.authorization || headers["x-api-key"],
         'anthropic-version': headers['anthropic-version'] || '2023-06-01',
         'anthropic-beta': headers['anthropic-beta'] || '',
       },
