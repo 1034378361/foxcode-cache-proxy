@@ -59,6 +59,7 @@ node proxy.js
 | `RETRY_MAX` | 3 | 最大重试次数 |
 | `RETRY_DELAY` | 1000 | 初始重试延迟(ms) |
 | `TIMEOUT_MS` | 180000 | 请求超时时间(ms) |
+| `DUMP_DIR` | ./dumps | 调试转储文件目录 |
 
 ### Systemd 服务（推荐）
 
