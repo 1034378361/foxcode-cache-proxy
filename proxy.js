@@ -182,7 +182,7 @@ async function handleAntigravityClaudeRequest(data, req, res, channel) {
   data.metadata = { ...data.metadata, user_id: CONFIG.userId };
   
   // 转发到 antigravity-manager，添加 /v1/messages 后缀
-  const targetUrl = `${CONFIG.antigravityTarget}/v1/messages`;
+  const targetUrl = CONFIG.antigravityTarget;  // 不加后缀，antigravity-manager 自动处理
   log.antigravity(`[${channel}] model=${data.model}, messages=${data.messages?.length || 0}`);
   
   // 使用专门的转发函数来捕获响应
@@ -200,7 +200,7 @@ async function handleAntigravityGeminiRequest(data, req, res, channel) {
   const pathMatch = req.url.match(/\/antigravity-gemini(\/.*)/);
   const geminiPath = pathMatch ? pathMatch[1] : '/v1beta/models/gemini-2.0-flash:generateContent';
   
-  const targetUrl = `${CONFIG.antigravityTarget}${geminiPath}`;
+  const targetUrl = CONFIG.antigravityTarget;  // 不加后缀，antigravity-manager 自动处理
   log.antigravity(`[${channel}] contents=${data.contents?.length || 0}, path=${geminiPath}`);
   
   // 使用 forwardAntigravityGemini 转发
