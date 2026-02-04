@@ -28,7 +28,8 @@ const CONFIG = {
   geminiChannels: ['gemini'],
   
   // Antigravity 渠道 (转发到本地 antigravity-manager)
-  antigravityChannels: ['antigravity-claude'],
+  antigravityClaudeChannels: ['antigravity-claude'],
+  antigravityGeminiChannels: ['antigravity-gemini'],
   antigravityTarget: 'http://192.168.3.111:8045',
   
   // 重试配置
@@ -104,8 +105,11 @@ function parseRequestType(url) {
   if (CONFIG.geminiChannels.includes(channel)) {
     return { type: 'gemini', channel };
   }
-  if (CONFIG.antigravityChannels.includes(channel)) {
-    return { type: 'antigravity', channel };
+  if (CONFIG.antigravityClaudeChannels.includes(channel)) {
+    return { type: 'antigravity-claude', channel };
+  }
+  if (CONFIG.antigravityGeminiChannels.includes(channel)) {
+    return { type: 'antigravity-gemini', channel };
   }
   
   return { type: 'unknown', channel };
@@ -144,8 +148,10 @@ async function handleRequest(req, res) {
       await handleCodexRequest(data, req, res);
     } else if (type === 'gemini') {
       await handleGeminiRequest(data, req, res);
-    } else if (type === 'antigravity') {
-      await handleAntigravityRequest(data, req, res, channel);
+    } else if (type === 'antigravity-claude') {
+      await handleAntigravityClaudeRequest(data, req, res, channel);
+    } else if (type === 'antigravity-gemini') {
+      await handleAntigravityGeminiRequest(data, req, res, channel);
     } else {
       // 未知类型，直接转发
       await forwardRaw(body, req, res);
@@ -171,7 +177,7 @@ async function handleClaudeRequest(data, req, res, channel) {
 }
 
 // ============ Antigravity 请求处理 ============
-async function handleAntigravityRequest(data, req, res, channel) {
+async function handleAntigravityClaudeRequest(data, req, res, channel) {
   // 注入 metadata.user_id（可能不支持，但加上无害）
   data.metadata = { ...data.metadata, user_id: CONFIG.userId };
   
@@ -181,6 +187,24 @@ async function handleAntigravityRequest(data, req, res, channel) {
   
   // 使用专门的转发函数来捕获响应
   await forwardAntigravity(data, req.headers, res, targetUrl);
+}
+
+// ============ Antigravity Gemini 请求处理 ============
+async function handleAntigravityGeminiRequest(data, req, res, channel) {
+  // 移除时间戳以稳定缓存
+  if (data.systemInstruction?.parts?.[0]?.text) {
+    data.systemInstruction.parts[0].text = removeTimestamp(data.systemInstruction.parts[0].text);
+  }
+  
+  // 从 URL 中提取模型路径: /antigravity-gemini/models/xxx:generateContent
+  const pathMatch = req.url.match(/\/antigravity-gemini(\/.*)/);
+  const geminiPath = pathMatch ? pathMatch[1] : '/v1beta/models/gemini-2.0-flash:generateContent';
+  
+  const targetUrl = `${CONFIG.antigravityTarget}${geminiPath}`;
+  log.antigravity(`[${channel}] contents=${data.contents?.length || 0}, path=${geminiPath}`);
+  
+  // 使用 forwardAntigravityGemini 转发
+  await forwardAntigravityGemini(data, req.headers, res, targetUrl);
 }
 
 // ============ Gemini 请求处理 ============
@@ -614,6 +638,63 @@ async function forwardAntigravity(data, headers, res, targetUrl) {
   }
 }
 
+// Antigravity Gemini 转发
+async function forwardAntigravityGemini(data, headers, res, targetUrl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CONFIG.timeoutMs);
+  
+  try {
+    const forwardHeaders = {
+      'Content-Type': 'application/json',
+    };
+    // 转换 API key
+    if (headers['x-goog-api-key']) {
+      forwardHeaders['Authorization'] = `Bearer ${headers['x-goog-api-key']}`;
+    } else if (headers['x-api-key']) {
+      forwardHeaders['Authorization'] = `Bearer ${headers['x-api-key']}`;
+    } else if (headers.authorization) {
+      forwardHeaders['Authorization'] = headers.authorization;
+    }
+    
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: forwardHeaders,
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+    
+    if (response.status >= 400) {
+      const errorBody = await response.text();
+      log.antigravity(`[Gemini] Response ${response.status}: ${errorBody.slice(0, 500)}`);
+      res.writeHead(response.status, {
+        'Content-Type': response.headers.get('content-type') || 'application/json',
+      });
+      res.end(errorBody);
+      return;
+    }
+    
+    res.writeHead(response.status, {
+      'Content-Type': response.headers.get('content-type') || 'application/json',
+    });
+
+    const reader = response.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(value);
+    }
+    res.end();
+    
+    log.antigravity(`[Gemini] Response ${response.status}`);
+  } catch (err) {
+    clearTimeout(timeout);
+    log.antigravity(`[Gemini] Error: ${err.message}`);
+    throw err;
+  }
+}
+
 async function forwardRaw(body, req, res) {
   const targetUrl = `https://${CONFIG.targetHost}${req.url}`;
   const response = await fetch(targetUrl, {
@@ -638,7 +719,8 @@ log.info(`Target: https://${CONFIG.targetHost}`);
 log.info(`Claude channels: ${CONFIG.claudeChannels.join(', ')}`);
 log.info(`Codex channels: ${CONFIG.codexChannels.join(', ')}`);
 log.info(`Gemini channels: ${CONFIG.geminiChannels.join(', ')}`);
-log.info(`Antigravity channels: ${CONFIG.antigravityChannels.join(', ')} -> ${CONFIG.antigravityTarget}`);
+log.info(`Antigravity Claude: ${CONFIG.antigravityClaudeChannels.join(', ')} -> ${CONFIG.antigravityTarget}`);
+log.info(`Antigravity Gemini: ${CONFIG.antigravityGeminiChannels.join(', ')} -> ${CONFIG.antigravityTarget}`);
 
 const server = createServer(handleRequest);
 server.on('error', (err) => { log.error(`Server error: ${err.message}`); process.exit(1); });
