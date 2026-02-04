@@ -1,0 +1,23 @@
+{
+  "name": "foxcode-cache-proxy",
+  "version": "1.0.0",
+  "description": "Proxy to inject metadata.user_id for Foxcode prompt caching",
+  "main": "proxy.js",
+  "type": "module",
+  "scripts": {
+    "start": "node proxy.js"
+  },
+  "keywords": [
+    "foxcode",
+    "claude",
+    "proxy",
+    "cache",
+    "clawdbot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}

@@ -1,0 +1,15 @@
+[Unit]
+Description=Foxcode Cache Proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/foxcode-cache-proxy
+ExecStart=/usr/bin/node proxy.js
+Restart=always
+RestartSec=5
+Environment=PROXY_PORT=18800
+Environment=USER_ID=clawdbot-user
+
+[Install]
+WantedBy=default.target
