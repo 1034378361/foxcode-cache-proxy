@@ -196,12 +196,8 @@ async function handleAntigravityGeminiRequest(data, req, res, channel) {
     data.systemInstruction.parts[0].text = removeTimestamp(data.systemInstruction.parts[0].text);
   }
   
-  // 从 URL 中提取模型路径: /antigravity-gemini/models/xxx:generateContent
-  const pathMatch = req.url.match(/\/antigravity-gemini(\/.*)/);
-  const geminiPath = pathMatch ? pathMatch[1] : '/v1beta/models/gemini-2.0-flash:generateContent';
-  
   const targetUrl = CONFIG.antigravityTarget;  // 不加后缀，antigravity-manager 自动处理
-  log.antigravity(`[${channel}] contents=${data.contents?.length || 0}, path=${geminiPath}`);
+  log.antigravity(`[${channel}] contents=${data.contents?.length || 0}`);
   
   // 使用 forwardAntigravityGemini 转发
   await forwardAntigravityGemini(data, req.headers, res, targetUrl);
